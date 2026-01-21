@@ -49,14 +49,9 @@
           <s-paragraph>
             @{{ message }}
           </s-paragraph>
-
           <s-stack direction="inline" gap="small-200">
             <s-button variant="primary" :loading="isLoading" @click="generate()">
-              @if(!empty($shop->llm_generated_at))
-                Regenerate
-              @else
-                Generate
-              @endif
+              @{{ llmGenerated ? 'Regenerate' : 'Generate' }}
             </s-button>
             <s-button variant="neutral" @click="learnMore()">Learn more</s-button>
           </s-stack>
@@ -84,15 +79,18 @@
     data() {
       return {
         state: 'init',
-        llmGenerated: {{ !empty($shop->llm_generated_at) ? 'true': 'false'}}
+        loadingStore: true,
+        llmGenerated: false,
       }
     },
     computed: {
         isLoading() {
-            return this.state == 'loading'
+            return this.loadingStore || this.state == 'loading'
         },
         message() {
-            if (this.state == 'loading') {
+            if (this.loadingStore) {
+                return 'Loading your store status...';
+            } else if (this.state == 'loading') {
                 return 'Generating LLMs.txt which will help chat bots discover your products.';
             } else if (this.llmGenerated) {
                 return 'Your LLMs.txt file has been generated! ChatGPT and other chat tools can now discover your products.';
@@ -102,6 +100,27 @@
         }
     },
     methods: {
+        async loadStoreStatus() {
+            try {
+                const response = await fetch('/api/store', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    },
+                });
+
+                if (!response.ok) {
+                    throw new Error('Request failed');
+                }
+
+                const result = await response.json();
+                this.llmGenerated = !!result.llm_generated;
+            } catch (error) {
+                console.error('Failed to load store status', error);
+            } finally {
+                this.loadingStore = false;
+            }
+        },
         async generate() {
             this.message = 'Generating...';
             this.state = 'loading';
@@ -135,6 +154,9 @@
         learnMore() {
             window.open('https://llmstxt.org/', '_blank');
         }
+    },
+    mounted() {
+        this.loadStoreStatus();
     }
   }).mount('#app')
 </script>
