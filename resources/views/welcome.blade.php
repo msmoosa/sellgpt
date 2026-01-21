@@ -29,7 +29,6 @@
     <!-- Home page pattern -->
     <!-- === -->
     <s-page id="app">
-
         <!-- === -->
         <!-- Callout Card -->
         <!-- If dismissed, use local storage or a database entry to avoid showing this section again to the same user. -->
@@ -53,7 +52,7 @@
             <s-button variant="primary" :loading="isLoading" @click="generate()">
               @{{ llmGenerated ? 'Regenerate' : 'Generate' }}
             </s-button>
-            <s-button variant="neutral" @click="learnMore()">Learn more</s-button>
+            <s-button v-if="llmGenerated" variant="neutral" @click="previewLlms()">Preview LLMs.txt</s-button>
           </s-stack>
         </s-grid>
 
@@ -81,6 +80,7 @@
         state: 'init',
         loadingStore: true,
         llmGenerated: false,
+        shop: null,
       }
     },
     computed: {
@@ -115,6 +115,7 @@
 
                 const result = await response.json();
                 this.llmGenerated = !!result.llm_generated;
+                this.shop = result.shop;
             } catch (error) {
                 console.error('Failed to load store status', error);
             } finally {
@@ -150,6 +151,9 @@
                 console.error(error);
                 this.message = 'Something went wrong while generating.';
             }
+        },
+        previewLlms() {
+            window.open('https://' + this.shop.name + '/llms.txt', '_blank');
         },
         learnMore() {
             window.open('https://llmstxt.org/', '_blank');
