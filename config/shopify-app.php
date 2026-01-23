@@ -389,22 +389,6 @@ return [
             'topic' => env('SHOPIFY_WEBHOOK_1_TOPIC', 'APP_UNINSTALLED'),
             'address' => env('SHOPIFY_WEBHOOK_1_ADDRESS', config('app.url') . '/webhook/app-uninstalled')
         ],
-        // GDPR Compliance Webhooks
-        [
-            'topic' => env('SHOPIFY_WEBHOOK_2_TOPIC', 'CUSTOMERS_DATA_REQUEST'),
-            'address' => env('SHOPIFY_WEBHOOK_2_ADDRESS', config('app.url') . '/webhook/customers-data-request'),
-            'class' => \App\Jobs\CustomersDataRequestJob::class
-        ],
-        [
-            'topic' => env('SHOPIFY_WEBHOOK_3_TOPIC', 'CUSTOMERS_REDACT'),
-            'address' => env('SHOPIFY_WEBHOOK_3_ADDRESS', config('app.url') . '/webhook/customers-redact'),
-            'class' => \App\Jobs\CustomersRedactJob::class
-        ],
-        [
-            'topic' => env('SHOPIFY_WEBHOOK_4_TOPIC', 'SHOP_REDACT'),
-            'address' => env('SHOPIFY_WEBHOOK_4_ADDRESS', config('app.url') . '/webhook/shop-redact'),
-            'class' => \App\Jobs\ShopRedactJob::class
-        ]
         /*
             [
                 'topic' => env('SHOPIFY_WEBHOOK_1_TOPIC', 'ORDERS_CREATE'),

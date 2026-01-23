@@ -1,0 +1,27 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "41cf0ba0f02297b9bda4a64b17f32642"
+name = "SellGPT - Local"
+application_url = "https://sellgpt.test"
+embedded = true
+
+[webhooks]
+api_version = "2026-01"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+uri = "https://d876b6fbcff3.ngrok-free.app/webhook/compliance-event"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "write_online_store_navigation,read_products,write_products,write_content,read_themes"
+optional_scopes = [ ]
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [ "https://sellgpt.test/authenticate" ]
+
+[app_proxy]
+url = "https://sellgpt.test"
+subpath = "sellgpt"
+prefix = "apps"

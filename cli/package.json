@@ -1,0 +1,6 @@
+{
+  "name": "sellgpt-cli",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shopify CLI configuration for SellGPT app"
+}

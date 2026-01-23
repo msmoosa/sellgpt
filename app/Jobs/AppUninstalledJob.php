@@ -7,15 +7,17 @@ use Osiset\ShopifyApp\Contracts\Queries\Shop as QueriesShop;
 use Osiset\ShopifyApp\Actions\CancelCurrentPlan;
 use Illuminate\Support\Facades\Storage;
 use App\Models\User;
+use Osiset\ShopifyApp\Objects\Values\ShopDomain;
 
 class AppUninstalledJob extends \Osiset\ShopifyApp\Messaging\Jobs\AppUninstalledJob
 {
     public function handle(Shop $shopCommand, QueriesShop $shopQuery, CancelCurrentPlan $cancelCurrentPlanAction): bool
     {
-        parent::handle($shopCommand, $shopQuery, $cancelCurrentPlanAction);
+        $result = parent::handle($shopCommand, $shopQuery, $cancelCurrentPlanAction);
 
         // clear the llm generated at field
-        $shop = User::withTrashed()->where('name', $this->domain)->first();
+        $domain = ShopDomain::fromNative($this->domain);
+        $shop = User::withTrashed()->whereName($domain)->first();
         if ($shop) {
             $shop->llm_generated_at = null;
             $shop->save();
@@ -27,6 +29,6 @@ class AppUninstalledJob extends \Osiset\ShopifyApp\Messaging\Jobs\AppUninstalled
             Storage::delete($filename);
         }
 
-        return true;
+        return $result && true;
     }
 }
