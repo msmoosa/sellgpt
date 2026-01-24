@@ -22,3 +22,7 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Exclude nested git repositories in cli directory
+/cli/sell-gpt-boost-ai-sales/
+/cli/sell-gpt-local/

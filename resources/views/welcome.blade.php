@@ -68,7 +68,22 @@
 
   </s-box>
 </s-section>
-    </s-page>
+<s-section v-if="llmGenerated">
+  <s-box>
+    <s-heading>Boost your sales from AI Chatbots</s-heading>
+    <s-text>Your LLMs.txt file has the following content:</s-text>
+   <div>@{{ shop.products_count }} products</div>
+   <div>@{{ shop.collections_count }} collections</div>
+   <div>@{{ shop.pages_count }} pages</div>
+   <div>@{{ shop.blogs_count }} blogs</div>
+  </s-box>
+</s-section>
+<s-box slot="aside">
+  <s-section heading="Why llms.txt">
+    <s-paragraph>llms.txt is a file that helps AI chatbots discover your products, collections, pages, and blogs. Setting it up can help boost traffic to your store and increase sales.</s-paragraph>
+  </s-section>
+</s-box>
+</s-page>
 </body>
 
 <script type="text/javascript">
@@ -92,6 +107,8 @@
                 return 'Loading your store status...';
             } else if (this.state == 'loading') {
                 return 'Generating LLMs.txt which will help chat bots discover your products.';
+            } else if (this.state == 'error') {
+                return 'Something went wrong while generating. Please try again later';
             } else if (this.llmGenerated) {
                 return 'Your LLMs.txt file has been generated! ChatGPT and other chat tools can now discover your products.';
             } else {
@@ -144,12 +161,13 @@
                 if (result.success) {
                   this.llmGenerated = true;
                   this.state = 'generated';
+                  this.loadStoreStatus();
                 } else {
                   throw new Error(result.message || 'Request failed');
                 }
             } catch (error) {
                 console.error(error);
-                this.message = 'Something went wrong while generating.';
+                this.state = 'error';
             }
         },
         previewLlms() {

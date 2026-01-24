@@ -29,13 +29,19 @@ class GenerateController extends Controller
             $api = $this->initializeApi($shop);
             $shopData = $this->fetchShopData($api);
             $products = $this->fetchProducts($api);
+            $collections = $this->fetchCollections($api);
+            $pages = $this->fetchPages($api);
+            $blogs = $this->fetchBlogs($api);
         } catch (\Exception $e) {
             return $this->handleApiError($e, $shop);
         }
 
         $shopUrl = 'https://' . $shop->getDomain()->toNative();
         $shopDomain = $shop->getDomain()->toNative();
-        $markdown = $this->buildMarkdown($shopData, $products, $shopUrl);
+        $markdown = $this->buildMarkdown($shopData, $products, $collections, $pages, $blogs, $shopUrl);
+        
+        // Save counts to user model
+        $this->saveContentCounts($shop, $products, $collections, $pages, $blogs);
         
         // Create redirect URL in Shopify
         $this->createRedirectUrl($api, $shopDomain);
@@ -161,6 +167,187 @@ class GenerateController extends Controller
     }
 
     /**
+     * Fetch collections from Shopify API.
+     */
+    protected function fetchCollections($api)
+    {
+        $collectionsResult = $api->rest('GET', '/admin/api/2024-10/smart_collections.json', [
+            'limit' => 250,
+            'fields' => 'id,title,handle,body_html,updated_at,published_at',
+        ]);
+
+        if (isset($collectionsResult['errors']) && $collectionsResult['errors'] === true) {
+            Log::warning('Error fetching collections', ['error' => $collectionsResult['body'] ?? 'Unknown error']);
+            return [];
+        }
+
+        $smartCollections = $collectionsResult['body']['smart_collections'] ?? [];
+        
+        // Convert ResponseAccess to array if needed
+        if (is_object($smartCollections) && method_exists($smartCollections, 'toArray')) {
+            $smartCollections = $smartCollections->toArray();
+        }
+        if (!is_array($smartCollections)) {
+            $smartCollections = [];
+        }
+
+        // Also fetch custom collections
+        $customCollectionsResult = $api->rest('GET', '/admin/api/2024-10/custom_collections.json', [
+            'limit' => 250,
+            'fields' => 'id,title,handle,body_html,updated_at,published_at',
+        ]);
+
+        $customCollections = [];
+        if (!isset($customCollectionsResult['errors']) || $customCollectionsResult['errors'] !== true) {
+            $customCollections = $customCollectionsResult['body']['custom_collections'] ?? [];
+            
+            // Convert ResponseAccess to array if needed
+            if (is_object($customCollections) && method_exists($customCollections, 'toArray')) {
+                $customCollections = $customCollections->toArray();
+            }
+            if (!is_array($customCollections)) {
+                $customCollections = [];
+            }
+        }
+
+        // Merge both types (now guaranteed to be arrays)
+        $allCollections = array_merge($smartCollections, $customCollections);
+
+        return $allCollections;
+    }
+
+    /**
+     * Fetch pages from Shopify API.
+     */
+    protected function fetchPages($api)
+    {
+        $pagesResult = $api->rest('GET', '/admin/api/2024-10/pages.json', [
+            'limit' => 250,
+            'fields' => 'id,title,handle,body_html,updated_at,published_at',
+        ]);
+
+        if (isset($pagesResult['errors']) && $pagesResult['errors'] === true) {
+            Log::warning('Error fetching pages', ['error' => $pagesResult['body'] ?? 'Unknown error']);
+            return [];
+        }
+
+        $pages = $pagesResult['body']['pages'] ?? null;
+
+        // Convert ResponseAccess to array if needed
+        if (is_object($pages) && method_exists($pages, 'toArray')) {
+            return $pages->toArray();
+        }
+
+        return is_array($pages) ? $pages : [];
+    }
+
+    /**
+     * Fetch blogs and their articles from Shopify API.
+     */
+    protected function fetchBlogs($api)
+    {
+        $blogsResult = $api->rest('GET', '/admin/api/2024-10/blogs.json', [
+            'limit' => 250,
+            'fields' => 'id,title,handle,updated_at',
+        ]);
+
+        if (isset($blogsResult['errors']) && $blogsResult['errors'] === true) {
+            Log::warning('Error fetching blogs', ['error' => $blogsResult['body'] ?? 'Unknown error']);
+            return [];
+        }
+
+        $blogs = $blogsResult['body']['blogs'] ?? [];
+
+        // Convert ResponseAccess to array if needed
+        if (is_object($blogs) && method_exists($blogs, 'toArray')) {
+            $blogs = $blogs->toArray();
+        }
+
+        if (!is_array($blogs)) {
+            return [];
+        }
+
+        // Fetch articles for each blog
+        $blogsWithArticles = [];
+        foreach ($blogs as $blog) {
+            $blogId = $blog['id'] ?? null;
+            if (!$blogId) {
+                continue;
+            }
+
+            try {
+                $articlesResult = $api->rest('GET', "/admin/api/2024-10/blogs/{$blogId}/articles.json", [
+                    'limit' => 250,
+                    'fields' => 'id,title,handle,body_html,updated_at,published_at,author',
+                ]);
+
+                $articles = [];
+                if (!isset($articlesResult['errors']) || $articlesResult['errors'] !== true) {
+                    $articles = $articlesResult['body']['articles'] ?? [];
+                    
+                    // Convert ResponseAccess to array if needed
+                    if (is_object($articles) && method_exists($articles, 'toArray')) {
+                        $articles = $articles->toArray();
+                    }
+                }
+
+                $blogsWithArticles[] = [
+                    'blog' => $blog,
+                    'articles' => is_array($articles) ? $articles : [],
+                ];
+            } catch (\Exception $e) {
+                Log::warning('Error fetching articles for blog', [
+                    'blog_id' => $blogId,
+                    'error' => $e->getMessage(),
+                ]);
+                $blogsWithArticles[] = [
+                    'blog' => $blog,
+                    'articles' => [],
+                ];
+            }
+        }
+
+        return $blogsWithArticles;
+    }
+
+    /**
+     * Save content counts to the user model.
+     */
+    protected function saveContentCounts($shop, array $products, array $collections, array $pages, array $blogs)
+    {
+        try {
+            $productsCount = count($products);
+            $collectionsCount = count($collections);
+            $pagesCount = count($pages);
+            
+            // Count total articles across all blogs
+            $blogsCount = 0;
+            foreach ($blogs as $blogData) {
+                $blogsCount += count($blogData['articles'] ?? []);
+            }
+
+            $shop->products_count = $productsCount;
+            $shop->collections_count = $collectionsCount;
+            $shop->pages_count = $pagesCount;
+            $shop->blogs_count = $blogsCount;
+            $shop->save();
+
+            Log::info('Content counts saved', [
+                'shop_id' => $shop->getId()->toNative(),
+                'products' => $productsCount,
+                'collections' => $collectionsCount,
+                'pages' => $pagesCount,
+                'blogs' => $blogsCount,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error saving content counts', [
+                'shop_id' => $shop->getId()->toNative() ?? 'unknown',
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
      * Handle API errors and return appropriate response.
      */
     protected function handleApiError(\Exception $e, $shop)
@@ -177,13 +364,16 @@ class GenerateController extends Controller
     /**
      * Build the complete markdown content.
      */
-    protected function buildMarkdown(array $shopData, array $products, string $shopUrl): string
+    protected function buildMarkdown(array $shopData, array $products, array $collections, array $pages, array $blogs, string $shopUrl): string
     {
         $lines = [];
         
         $lines = array_merge($lines, $this->buildShopHeader($shopData, $shopUrl));
         $lines = array_merge($lines, $this->buildShopMetadata($shopData, $shopUrl));
         $lines = array_merge($lines, $this->buildProductsSection($products, $shopUrl, $shopData));
+        $lines = array_merge($lines, $this->buildCollectionsSection($collections, $shopUrl));
+        $lines = array_merge($lines, $this->buildPagesSection($pages, $shopUrl));
+        $lines = array_merge($lines, $this->buildBlogsSection($blogs, $shopUrl));
 
         return implode("\n", $lines);
     }
@@ -350,6 +540,131 @@ class GenerateController extends Controller
             }
         }
 
+        return $lines;
+    }
+
+    /**
+     * Build collections section.
+     */
+    protected function buildCollectionsSection(array $collections, string $shopUrl): array
+    {
+        if (empty($collections)) {
+            return [];
+        }
+
+        $lines = ['## Collections', ''];
+
+        foreach ($collections as $collection) {
+            $title = $collection['title'] ?? '';
+            $handle = $collection['handle'] ?? '';
+            $collectionUrl = sprintf('%s/collections/%s', $shopUrl, $handle);
+            $description = isset($collection['body_html']) ? strip_tags($collection['body_html']) : '';
+            $updatedAt = $collection['updated_at'] ?? '';
+            $publishedAt = $collection['published_at'] ?? '';
+
+            $collectionLine = sprintf('- [%s](%s)', $title, $collectionUrl);
+            if (!empty($description)) {
+                $collectionLine .= ': ' . $description;
+            }
+            $lines[] = $collectionLine;
+
+            if (!empty($updatedAt)) {
+                $lines[] = sprintf('  Updated: %s', $updatedAt);
+            }
+            if (!empty($publishedAt)) {
+                $lines[] = sprintf('  Published: %s', $publishedAt);
+            }
+        }
+
+        $lines[] = '';
+        return $lines;
+    }
+
+    /**
+     * Build pages section.
+     */
+    protected function buildPagesSection(array $pages, string $shopUrl): array
+    {
+        if (empty($pages)) {
+            return [];
+        }
+
+        $lines = ['## Pages', ''];
+
+        foreach ($pages as $page) {
+            $title = $page['title'] ?? '';
+            $handle = $page['handle'] ?? '';
+            $pageUrl = sprintf('%s/pages/%s', $shopUrl, $handle);
+            $description = isset($page['body_html']) ? strip_tags($page['body_html']) : '';
+            $updatedAt = $page['updated_at'] ?? '';
+            $publishedAt = $page['published_at'] ?? '';
+
+            $pageLine = sprintf('- [%s](%s)', $title, $pageUrl);
+            if (!empty($description)) {
+                // Truncate long descriptions
+                $description = mb_strlen($description) > 200 ? mb_substr($description, 0, 200) . '...' : $description;
+                $pageLine .= ': ' . $description;
+            }
+            $lines[] = $pageLine;
+
+            if (!empty($updatedAt)) {
+                $lines[] = sprintf('  Updated: %s', $updatedAt);
+            }
+            if (!empty($publishedAt)) {
+                $lines[] = sprintf('  Published: %s', $publishedAt);
+            }
+        }
+
+        $lines[] = '';
+        return $lines;
+    }
+
+    /**
+     * Build blogs section.
+     */
+    protected function buildBlogsSection(array $blogs, string $shopUrl): array
+    {
+        if (empty($blogs)) {
+            return [];
+        }
+
+        $lines = ['## Blog Posts', ''];
+
+        foreach ($blogs as $blogData) {
+            $blog = $blogData['blog'] ?? [];
+            $articles = $blogData['articles'] ?? [];
+            $blogHandle = $blog['handle'] ?? '';
+
+            foreach ($articles as $article) {
+                $title = $article['title'] ?? '';
+                $handle = $article['handle'] ?? '';
+                $articleUrl = sprintf('%s/blogs/%s/%s', $shopUrl, $blogHandle, $handle);
+                $description = isset($article['body_html']) ? strip_tags($article['body_html']) : '';
+                $updatedAt = $article['updated_at'] ?? '';
+                $publishedAt = $article['published_at'] ?? '';
+                $author = $article['author'] ?? '';
+
+                $articleLine = sprintf('- [%s](%s)', $title, $articleUrl);
+                if (!empty($description)) {
+                    // Truncate long descriptions
+                    $description = mb_strlen($description) > 200 ? mb_substr($description, 0, 200) . '...' : $description;
+                    $articleLine .= ': ' . $description;
+                }
+                $lines[] = $articleLine;
+
+                if (!empty($author)) {
+                    $lines[] = sprintf('  Author: %s', $author);
+                }
+                if (!empty($updatedAt)) {
+                    $lines[] = sprintf('  Updated: %s', $updatedAt);
+                }
+                if (!empty($publishedAt)) {
+                    $lines[] = sprintf('  Published: %s', $publishedAt);
+                }
+            }
+        }
+
+        $lines[] = '';
         return $lines;
     }
 
