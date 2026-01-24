@@ -43,7 +43,7 @@
         alignItems="center"
       >
         <s-grid gap="small-100">
-          <s-heading>Ready to boost your sales from ChatGPT?</s-heading>
+          <s-heading>Get your store discovered by AI chatbots</s-heading>
 
           <s-paragraph>
             @{{ message }}
@@ -70,7 +70,7 @@
 </s-section>
 <s-section v-if="llmGenerated">
   <s-box>
-    <s-heading>Boost your sales from AI Chatbots</s-heading>
+    <s-heading>Your store is now discoverable by AI chatbots</s-heading>
     <s-text>Your LLMs.txt file has the following content:</s-text>
    <div>@{{ shop.products_count }} products</div>
    <div>@{{ shop.collections_count }} collections</div>
